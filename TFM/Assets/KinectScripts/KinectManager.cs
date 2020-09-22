@@ -855,8 +855,9 @@ public class KinectManager : MonoBehaviour
 
 	void Awake()
 	{
-		//CalibrationText = GameObject.Find("CalibrationText");
-		int hr = 0;
+        WrapperTools.EnsureKinectWrapperPresence();
+        //CalibrationText = GameObject.Find("CalibrationText");
+        int hr = 0;
 		
 		try
 		{

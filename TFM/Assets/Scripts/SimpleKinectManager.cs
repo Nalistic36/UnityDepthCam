@@ -8,25 +8,6 @@ public class SimpleKinectManager : MonoBehaviour
 {
 	public enum Smoothing : int { None, Default, Medium, Aggressive }
 
-	// Public Bool to determine whether to receive and compute the user map
-	public bool ComputeUserMap = false;
-
-	// Public Bool to determine whether to receive and compute the color map
-	public bool ComputeColorMap = false;
-
-	// Public Bool to determine whether to display user map on the GUI
-	public bool DisplayUserMap = false;
-
-	// Public Bool to determine whether to display color map on the GUI
-	public bool DisplayColorMap = false;
-
-	// Public Bool to determine whether to display the skeleton lines on user map
-	public bool DisplaySkeletonLines = false;
-
-	// Public Float to specify the image width used by depth and color maps, as % of the camera width. the height is calculated depending on the width.
-	// if percent is zero, it is calculated internally to match the selected width and height of the depth image
-	public float DisplayMapsWidthPercent = 20f;
-
 	// How high off the ground is the sensor (in meters).
 	public float SensorHeight = 1.0f;
 
@@ -50,15 +31,8 @@ public class SimpleKinectManager : MonoBehaviour
 
 	// Public Bool to determine the use of additional filters
 	public bool UseBoneOrientationsFilter = false;
-	public bool UseClippedLegsFilter = false;
 	public bool UseBoneOrientationsConstraint = true;
 	public bool UseSelfIntersectionConstraint = false;
-
-	// Lists of GameObjects that will be controlled by which player.
-	public List<GameObject> Player1Avatars;
-
-	// Calibration poses for each player, if needed
-	public KinectGestures.Gestures Player1CalibrationPose;
 
 	// Bool to keep track of whether Kinect has been initialized
 	private bool KinectInitialized = false;
@@ -73,19 +47,13 @@ public class SimpleKinectManager : MonoBehaviour
 
 	private int Player1Index;
 
-	// User Map vars.
-	private Texture2D usersLblTex;
 	private Color32[] usersMapColors;
 	private ushort[] usersPrevState;
 	private Rect usersMapRect;
 	private int usersMapSize;
 
-	private Texture2D usersClrTex;
-	//Color[] usersClrColors;
 	private Rect usersClrRect;
 
-	//short[] usersLabelMap;
-	private ushort[] usersDepthMap;
 	private float[] usersHistogramMap;
 
 	// List of all users
@@ -94,10 +62,6 @@ public class SimpleKinectManager : MonoBehaviour
 	// Image stream handles for the kinect
 	private IntPtr colorStreamHandle;
 	private IntPtr depthStreamHandle;
-
-	// Color image data, if used
-	private Color32[] colorImage;
-	private byte[] usersColorMap;
 
 	// Skeleton related structures
 	private KinectWrapper.NuiSkeletonFrame skeletonFrame;
@@ -113,17 +77,8 @@ public class SimpleKinectManager : MonoBehaviour
 	private Matrix4x4[] player1JointsOri;
 	private KinectWrapper.NuiSkeletonBoneOrientation[] jointOrientations;
 
-	// Calibration gesture data for each player
-	private KinectGestures.GestureData player1CalibrationData;
-
-	// Lists of gesture data, for each player
-	private List<KinectGestures.GestureData> player1Gestures = new List<KinectGestures.GestureData>();
-
 	// general gesture tracking time start
 	private float[] gestureTrackingAtTime;
-
-	// List of Gesture Listeners. They must implement KinectGestures.GestureListenerInterface
-	public List<KinectGestures.GestureListenerInterface> gestureListeners;
 
 	private Matrix4x4 kinectToWorld, flipMatrix;
 
@@ -149,23 +104,6 @@ public class SimpleKinectManager : MonoBehaviour
 		return false;
 	}
 
-	// returns the raw depth/user data, if ComputeUserMap is true
-	public ushort[] GetRawDepthMap()
-	{
-		return usersDepthMap;
-	}
-
-	// returns the depth data for a specific pixel, if ComputeUserMap is true
-	public ushort GetDepthForPixel(int x, int y)
-	{
-		int index = y * KinectWrapper.Constants.DepthImageWidth + x;
-
-		if (index >= 0 && index < usersDepthMap.Length)
-			return usersDepthMap[index];
-		else
-			return 0;
-	}
-
 	// returns the depth map position for a 3d joint position
 	public Vector2 GetDepthMapPosForJointPos(Vector3 posJoint)
 	{
@@ -173,40 +111,6 @@ public class SimpleKinectManager : MonoBehaviour
 		Vector2 vMapPos = new Vector2(vDepthPos.x, vDepthPos.y);
 
 		return vMapPos;
-	}
-
-	// returns the color map position for a depth 2d position
-	public Vector2 GetColorMapPosForDepthPos(Vector2 posDepth)
-	{
-		int cx, cy;
-
-		KinectWrapper.NuiImageViewArea pcViewArea = new KinectWrapper.NuiImageViewArea
-		{
-			eDigitalZoom = 0,
-			lCenterX = 0,
-			lCenterY = 0
-		};
-
-		KinectWrapper.NuiImageGetColorPixelCoordinatesFromDepthPixelAtResolution(
-			KinectWrapper.Constants.ColorImageResolution,
-			KinectWrapper.Constants.DepthImageResolution,
-			ref pcViewArea,
-			(int)posDepth.x, (int)posDepth.y, GetDepthForPixel((int)posDepth.x, (int)posDepth.y),
-			out cx, out cy);
-
-		return new Vector2(cx, cy);
-	}
-
-	// returns the depth image/users histogram texture,if ComputeUserMap is true
-	public Texture2D GetUsersLblTex()
-	{
-		return usersLblTex;
-	}
-
-	// returns the color image texture,if ComputeColorMap is true
-	public Texture2D GetUsersClrTex()
-	{
-		return usersClrTex;
 	}
 
 	// returns true if at least one user is currently detected by the sensor
@@ -264,12 +168,9 @@ public class SimpleKinectManager : MonoBehaviour
 	}
 
 	// returns true if the given joint of the specified user is being tracked
-	public bool IsJointTracked(uint UserId, int joint)
+	public bool IsJointTracked(int joint)
 	{
-		if (UserId == Player1ID)
-			return joint >= 0 && joint < player1JointsTracked.Length ? player1JointsTracked[joint] : false;
-		
-		return false;
+	    return joint >= 0 && joint < player1JointsTracked.Length ? player1JointsTracked[joint] : false;
 	}
 
 	// returns the joint position of the specified user, relative to the Kinect-sensor, in meters
@@ -279,15 +180,12 @@ public class SimpleKinectManager : MonoBehaviour
 	}
 
 	// returns the local joint position of the specified user, relative to the parent joint, in meters
-	public Vector3 GetJointLocalPosition(uint UserId, int joint)
+	public Vector3 GetJointLocalPosition(int joint)
 	{
 		int parent = KinectWrapper.GetSkeletonJointParent(joint);
 
-		if (UserId == Player1ID)
-			return joint >= 0 && joint < player1JointsPos.Length ?
-				(player1JointsPos[joint] - player1JointsPos[parent]) : Vector3.zero;
-
-		return Vector3.zero;
+		return joint >= 0 && joint < player1JointsPos.Length ?
+			(player1JointsPos[joint] - player1JointsPos[parent]) : Vector3.zero;
 	}
 
 	// returns the joint rotation of the specified user, relative to the Kinect-sensor
@@ -317,17 +215,14 @@ public class SimpleKinectManager : MonoBehaviour
 	}
 
 	// returns the direction between baseJoint and nextJoint, for the specified user
-	public Vector3 GetDirectionBetweenJoints(uint UserId, int baseJoint, int nextJoint, bool flipX, bool flipZ)
+	public Vector3 GetDirectionBetweenJoints(int baseJoint, int nextJoint, bool flipX, bool flipZ)
 	{
 		Vector3 jointDir = Vector3.zero;
 
-		if (UserId == Player1ID)
+		if (baseJoint >= 0 && baseJoint < player1JointsPos.Length && player1JointsTracked[baseJoint] &&
+			nextJoint >= 0 && nextJoint < player1JointsPos.Length && player1JointsTracked[nextJoint])
 		{
-			if (baseJoint >= 0 && baseJoint < player1JointsPos.Length && player1JointsTracked[baseJoint] &&
-				nextJoint >= 0 && nextJoint < player1JointsPos.Length && player1JointsTracked[nextJoint])
-			{
-				jointDir = player1JointsPos[nextJoint] - player1JointsPos[baseJoint];
-			}
+			jointDir = player1JointsPos[nextJoint] - player1JointsPos[baseJoint];
 		}
 	
 		if (jointDir != Vector3.zero)
@@ -340,225 +235,6 @@ public class SimpleKinectManager : MonoBehaviour
 		}
 
 		return jointDir;
-	}
-
-	// adds a gesture to the list of detected gestures for the specified user
-	public void DetectGesture(uint UserId, KinectGestures.Gestures gesture)
-	{
-		int index = GetGestureIndex(UserId, gesture);
-		if (index >= 0)
-			DeleteGesture(UserId, gesture);
-
-		KinectGestures.GestureData gestureData = new KinectGestures.GestureData();
-
-		gestureData.userId = UserId;
-		gestureData.gesture = gesture;
-		gestureData.state = 0;
-		gestureData.joint = 0;
-		gestureData.progress = 0f;
-		gestureData.complete = false;
-		gestureData.cancelled = false;
-
-		gestureData.checkForGestures = new List<KinectGestures.Gestures>();
-		switch (gesture)
-		{
-			case KinectGestures.Gestures.ZoomIn:
-				gestureData.checkForGestures.Add(KinectGestures.Gestures.ZoomOut);
-				gestureData.checkForGestures.Add(KinectGestures.Gestures.Wheel);
-				break;
-
-			case KinectGestures.Gestures.ZoomOut:
-				gestureData.checkForGestures.Add(KinectGestures.Gestures.ZoomIn);
-				gestureData.checkForGestures.Add(KinectGestures.Gestures.Wheel);
-				break;
-
-			case KinectGestures.Gestures.Wheel:
-				gestureData.checkForGestures.Add(KinectGestures.Gestures.ZoomIn);
-				gestureData.checkForGestures.Add(KinectGestures.Gestures.ZoomOut);
-				break;
-
-				//			case KinectGestures.Gestures.Jump:
-				//				gestureData.checkForGestures.Add(KinectGestures.Gestures.Squat);
-				//				break;
-				//				
-				//			case KinectGestures.Gestures.Squat:
-				//				gestureData.checkForGestures.Add(KinectGestures.Gestures.Jump);
-				//				break;
-				//				
-				//			case KinectGestures.Gestures.Push:
-				//				gestureData.checkForGestures.Add(KinectGestures.Gestures.Pull);
-				//				break;
-				//				
-				//			case KinectGestures.Gestures.Pull:
-				//				gestureData.checkForGestures.Add(KinectGestures.Gestures.Push);
-				//				break;
-		}
-
-		if (UserId == Player1ID)
-			player1Gestures.Add(gestureData);
-	}
-
-	// resets the gesture-data state for the given gesture of the specified user
-	public bool ResetGesture(uint UserId, KinectGestures.Gestures gesture)
-	{
-		int index = GetGestureIndex(UserId, gesture);
-		if (index < 0)
-			return false;
-
-		KinectGestures.GestureData gestureData = player1Gestures[index];
-
-		gestureData.state = 0;
-		gestureData.joint = 0;
-		gestureData.progress = 0f;
-		gestureData.complete = false;
-		gestureData.cancelled = false;
-		gestureData.startTrackingAtTime = Time.realtimeSinceStartup + KinectWrapper.Constants.MinTimeBetweenSameGestures;
-
-		if (UserId == Player1ID)
-			player1Gestures[index] = gestureData;
-
-		return true;
-	}
-
-	// resets the gesture-data states for all detected gestures of the specified user
-	public void ResetPlayerGestures(uint UserId)
-	{
-		if (UserId == Player1ID)
-		{
-			int listSize = player1Gestures.Count;
-
-			for (int i = 0; i < listSize; i++)
-			{
-				ResetGesture(UserId, player1Gestures[i].gesture);
-			}
-		}
-	}
-
-	// deletes the given gesture from the list of detected gestures for the specified user
-	public bool DeleteGesture(uint UserId, KinectGestures.Gestures gesture)
-	{
-		int index = GetGestureIndex(UserId, gesture);
-		if (index < 0)
-			return false;
-
-		if (UserId == Player1ID)
-			player1Gestures.RemoveAt(index);
-	
-		return true;
-	}
-
-	// clears detected gestures list for the specified user
-	public void ClearGestures(uint UserId)
-	{
-		if (UserId == Player1ID)
-		{
-			player1Gestures.Clear();
-		}
-	}
-
-	// returns the count of detected gestures in the list of detected gestures for the specified user
-	public int GetGesturesCount(uint UserId)
-	{
-		if (UserId == Player1ID)
-			return player1Gestures.Count;
-		
-		return 0;
-	}
-
-	// returns the list of detected gestures for the specified user
-	public List<KinectGestures.Gestures> GetGesturesList(uint UserId)
-	{
-		List<KinectGestures.Gestures> list = new List<KinectGestures.Gestures>();
-
-		if (UserId == Player1ID)
-		{
-			foreach (KinectGestures.GestureData data in player1Gestures)
-				list.Add(data.gesture);
-		}
-
-		return list;
-	}
-
-	// returns true, if the given gesture is in the list of detected gestures for the specified user
-	public bool IsGestureDetected(uint UserId, KinectGestures.Gestures gesture)
-	{
-		int index = GetGestureIndex(UserId, gesture);
-		return index >= 0;
-	}
-
-	// returns true, if the given gesture for the specified user is complete
-	public bool IsGestureComplete(uint UserId, KinectGestures.Gestures gesture, bool bResetOnComplete)
-	{
-		int index = GetGestureIndex(UserId, gesture);
-
-		if (index >= 0)
-		{
-			if (UserId == Player1ID)
-			{
-				KinectGestures.GestureData gestureData = player1Gestures[index];
-
-				if (bResetOnComplete && gestureData.complete)
-				{
-					ResetPlayerGestures(UserId);
-					return true;
-				}
-
-				return gestureData.complete;
-			}
-		}
-
-		return false;
-	}
-
-	// returns true, if the given gesture for the specified user is cancelled
-	public bool IsGestureCancelled(uint UserId, KinectGestures.Gestures gesture)
-	{
-		int index = GetGestureIndex(UserId, gesture);
-
-		if (index >= 0)
-		{
-			if (UserId == Player1ID)
-			{
-				KinectGestures.GestureData gestureData = player1Gestures[index];
-				return gestureData.cancelled;
-			}
-		}
-
-		return false;
-	}
-
-	// returns the progress in range [0, 1] of the given gesture for the specified user
-	public float GetGestureProgress(uint UserId, KinectGestures.Gestures gesture)
-	{
-		int index = GetGestureIndex(UserId, gesture);
-
-		if (index >= 0)
-		{
-			if (UserId == Player1ID)
-			{
-				KinectGestures.GestureData gestureData = player1Gestures[index];
-				return gestureData.progress;
-			}
-		}
-
-		return 0f;
-	}
-
-	// returns the current "screen position" of the given gesture for the specified user
-	public Vector3 GetGestureScreenPos(uint UserId, KinectGestures.Gestures gesture)
-	{
-		int index = GetGestureIndex(UserId, gesture);
-
-		if (index >= 0)
-		{
-			if (UserId == Player1ID)
-			{
-				KinectGestures.GestureData gestureData = player1Gestures[index];
-				return gestureData.screenPos;
-			}
-		}
-
-		return Vector3.zero;
 	}
 
 	public void ClearKinectUsers()
@@ -617,19 +293,15 @@ public class SimpleKinectManager : MonoBehaviour
 		}
 	}
 
-
-	//----------------------------------- end of public functions --------------------------------------//
-
 	void Awake()
 	{
-		//CalibrationText = GameObject.Find("CalibrationText");
-		int hr = 0;
+        WrapperTools.EnsureKinectWrapperPresence();
+        int hr = 0;
 
 		try
 		{
 			hr = KinectWrapper.NuiInitialize(KinectWrapper.NuiInitializeFlags.UsesSkeleton |
-				KinectWrapper.NuiInitializeFlags.UsesDepthAndPlayerIndex |
-				(ComputeColorMap ? KinectWrapper.NuiInitializeFlags.UsesColor : 0));
+				KinectWrapper.NuiInitializeFlags.UsesDepthAndPlayerIndex);
 			if (hr != 0)
 			{
 				throw new Exception("NuiInitialize Failed");
@@ -642,26 +314,6 @@ public class SimpleKinectManager : MonoBehaviour
 			}
 
 			depthStreamHandle = IntPtr.Zero;
-			if (ComputeUserMap)
-			{
-				hr = KinectWrapper.NuiImageStreamOpen(KinectWrapper.NuiImageType.DepthAndPlayerIndex,
-					KinectWrapper.Constants.DepthImageResolution, 0, 2, IntPtr.Zero, ref depthStreamHandle);
-				if (hr != 0)
-				{
-					throw new Exception("Cannot open depth stream");
-				}
-			}
-
-			colorStreamHandle = IntPtr.Zero;
-			if (ComputeColorMap)
-			{
-				hr = KinectWrapper.NuiImageStreamOpen(KinectWrapper.NuiImageType.Color,
-					KinectWrapper.Constants.ColorImageResolution, 0, 2, IntPtr.Zero, ref colorStreamHandle);
-				if (hr != 0)
-				{
-					throw new Exception("Cannot open color stream");
-				}
-			}
 
 			// set kinect elevation angle
 			KinectWrapper.NuiCameraElevationSetAngle(SensorAngle);
@@ -748,12 +400,9 @@ public class SimpleKinectManager : MonoBehaviour
 			//float heightAboveHips = SensorHeight - 1.0f;
 
 			// transform matrix - kinect to world
-			//kinectToWorld.SetTRS(new Vector3(0.0f, heightAboveHips, 0.0f), quatTiltAngle, Vector3.one);
 			kinectToWorld.SetTRS(new Vector3(0.0f, SensorHeight, 0.0f), quatTiltAngle, Vector3.one);
 			flipMatrix = Matrix4x4.identity;
 			flipMatrix[2, 2] = -1;
-
-			DontDestroyOnLoad(gameObject);
 		}
 		catch (DllNotFoundException e)
 		{
@@ -772,38 +421,6 @@ public class SimpleKinectManager : MonoBehaviour
 			return;
 		}
 
-		if (ComputeUserMap)
-		{
-			// Initialize depth & label map related stuff
-			usersMapSize = KinectWrapper.GetDepthWidth() * KinectWrapper.GetDepthHeight();
-			usersLblTex = new Texture2D(KinectWrapper.GetDepthWidth(), KinectWrapper.GetDepthHeight());
-			usersMapColors = new Color32[usersMapSize];
-			usersPrevState = new ushort[usersMapSize];
-
-			usersDepthMap = new ushort[usersMapSize];
-			usersHistogramMap = new float[8192];
-		}
-
-		if (ComputeColorMap)
-		{
-			// Initialize color map related stuff
-			usersClrTex = new Texture2D(KinectWrapper.GetColorWidth(), KinectWrapper.GetColorHeight());
-
-			colorImage = new Color32[KinectWrapper.GetColorWidth() * KinectWrapper.GetColorHeight()];
-			usersColorMap = new byte[colorImage.Length << 2];
-		}
-
-		// try to automatically find the available avatar controllers in the scene
-		if (Player1Avatars.Count == 0)
-		{
-			AvatarController[] avatars = FindObjectsOfType(typeof(AvatarController)) as AvatarController[];
-
-			foreach (AvatarController avatar in avatars)
-			{
-				Player1Avatars.Add(avatar.gameObject);
-			}
-		}
-
 		// Initialize user list to contain ALL users.
 		allUsers = new List<uint>();
 
@@ -814,25 +431,6 @@ public class SimpleKinectManager : MonoBehaviour
 	{
 		if (KinectInitialized)
 		{
-			// If the players aren't all calibrated yet, draw the user map.
-			if (ComputeUserMap)
-			{
-				if (depthStreamHandle != IntPtr.Zero &&
-					KinectWrapper.PollDepth(depthStreamHandle, KinectWrapper.Constants.IsNearMode, ref usersDepthMap))
-				{
-					UpdateUserMap();
-				}
-			}
-
-			if (ComputeColorMap)
-			{
-				if (colorStreamHandle != IntPtr.Zero &&
-					KinectWrapper.PollColor(colorStreamHandle, ref usersColorMap, ref colorImage))
-				{
-					UpdateColorMap();
-				}
-			}
-
 			if (KinectWrapper.PollSkeleton(ref smoothParameters, ref skeletonFrame))
 			{
 				ProcessSkeleton();
@@ -850,137 +448,6 @@ public class SimpleKinectManager : MonoBehaviour
 		}
 	}
 
-	// Update the User Map
-	void UpdateUserMap()
-	{
-		int numOfPoints = 0;
-		Array.Clear(usersHistogramMap, 0, usersHistogramMap.Length);
-
-		// Calculate cumulative histogram for depth
-		for (int i = 0; i < usersMapSize; i++)
-		{
-			// Only calculate for depth that contains users
-			if ((usersDepthMap[i] & 7) != 0)
-			{
-				ushort userDepth = (ushort)(usersDepthMap[i] >> 3);
-				usersHistogramMap[userDepth]++;
-				numOfPoints++;
-			}
-		}
-
-		if (numOfPoints > 0)
-		{
-			for (int i = 1; i < usersHistogramMap.Length; i++)
-			{
-				usersHistogramMap[i] += usersHistogramMap[i - 1];
-			}
-
-			for (int i = 0; i < usersHistogramMap.Length; i++)
-			{
-				usersHistogramMap[i] = 1.0f - (usersHistogramMap[i] / numOfPoints);
-			}
-		}
-
-		// dummy structure needed by the coordinate mapper
-		KinectWrapper.NuiImageViewArea pcViewArea = new KinectWrapper.NuiImageViewArea
-		{
-			eDigitalZoom = 0,
-			lCenterX = 0,
-			lCenterY = 0
-		};
-
-		// Create the actual users texture based on label map and depth histogram
-		Color32 clrClear = Color.clear;
-		for (int i = 0; i < usersMapSize; i++)
-		{
-			// Flip the texture as we convert label map to color array
-			int flipIndex = i; // usersMapSize - i - 1;
-
-			ushort userMap = (ushort)(usersDepthMap[i] & 7);
-			ushort userDepth = (ushort)(usersDepthMap[i] >> 3);
-
-			ushort nowUserPixel = userMap != 0 ? (ushort)((userMap << 13) | userDepth) : userDepth;
-			ushort wasUserPixel = usersPrevState[flipIndex];
-
-			// draw only the changed pixels
-			if (nowUserPixel != wasUserPixel)
-			{
-				usersPrevState[flipIndex] = nowUserPixel;
-
-				if (userMap == 0)
-				{
-					usersMapColors[flipIndex] = clrClear;
-				}
-				else
-				{
-					if (colorImage != null)
-					{
-						int x = i % KinectWrapper.Constants.DepthImageWidth;
-						int y = i / KinectWrapper.Constants.DepthImageWidth;
-
-						int cx, cy;
-						int hr = KinectWrapper.NuiImageGetColorPixelCoordinatesFromDepthPixelAtResolution(
-							KinectWrapper.Constants.ColorImageResolution,
-							KinectWrapper.Constants.DepthImageResolution,
-							ref pcViewArea,
-							x, y, usersDepthMap[i],
-							out cx, out cy);
-
-						if (hr == 0)
-						{
-							int colorIndex = cx + cy * KinectWrapper.Constants.ColorImageWidth;
-							//colorIndex = usersMapSize - colorIndex - 1;
-							if (colorIndex >= 0 && colorIndex < usersMapSize)
-							{
-								Color32 colorPixel = colorImage[colorIndex];
-								usersMapColors[flipIndex] = colorPixel;  // new Color(colorPixel.r / 256f, colorPixel.g / 256f, colorPixel.b / 256f, 0.9f);
-								usersMapColors[flipIndex].a = 230; // 0.9f
-							}
-						}
-					}
-					else
-					{
-						// Create a blending color based on the depth histogram
-						float histDepth = usersHistogramMap[userDepth];
-						Color c = new Color(histDepth, histDepth, histDepth, 0.9f);
-
-						switch (userMap % 4)
-						{
-							case 0:
-								usersMapColors[flipIndex] = Color.red * c;
-								break;
-							case 1:
-								usersMapColors[flipIndex] = Color.green * c;
-								break;
-							case 2:
-								usersMapColors[flipIndex] = Color.blue * c;
-								break;
-							case 3:
-								usersMapColors[flipIndex] = Color.magenta * c;
-								break;
-						}
-					}
-				}
-
-			}
-		}
-
-		// Draw it!
-		usersLblTex.SetPixels32(usersMapColors);
-
-		if (!DisplaySkeletonLines)
-		{
-			usersLblTex.Apply();
-		}
-	}
-
-	// Update the Color Map
-	void UpdateColorMap()
-	{
-		usersClrTex.SetPixels32(colorImage);
-		usersClrTex.Apply();
-	}
-
 	// Assign UserId to player 1 or 2.
 	void CalibrateUser(uint UserId, int UserIndex, ref KinectWrapper.NuiSkeletonData skeletonData)
 	{
@@ -990,36 +457,22 @@ public class SimpleKinectManager : MonoBehaviour
 			// Check to make sure we don't accidentally assign player 2 to player 1.
 			if (!allUsers.Contains(UserId))
 			{
-				if (CheckForCalibrationPose(UserId, ref Player1CalibrationPose, ref player1CalibrationData, ref skeletonData))
-				{
-					Player1Calibrated = true;
-					Player1ID = UserId;
-					Player1Index = UserIndex;
+				Player1Calibrated = true;
+				Player1ID = UserId;
+				Player1Index = UserIndex;
 
-					allUsers.Add(UserId);
+				allUsers.Add(UserId);
 
-					// reset skeleton filters
-					ResetFilters();
-
-					// If we're not using 2 users, we're all calibrated.
-					//if(!TwoUsers)
-					{
-						AllPlayersCalibrated = allUsers.Count >= 1;
-					}
-				}
+				// reset skeleton filters
+				ResetFilters();
+			    AllPlayersCalibrated = allUsers.Count >= 1;
 			}
 		}
 		
-
 		// If all users are calibrated, stop trying to find them.
 		if (AllPlayersCalibrated)
 		{
 			Debug.Log("All players calibrated.");
-
-			//if(CalibrationText != null)
-			//{
-			//	CalibrationText.guiText.text = "";
-			//}
 		}
 	}
 
@@ -1033,24 +486,11 @@ public class SimpleKinectManager : MonoBehaviour
 			Player1ID = 0;
 			Player1Index = 0;
 			Player1Calibrated = false;
-
-			player1CalibrationData.userId = 0;
 		}	
-
-		// clear gestures list for this user
-		ClearGestures(UserId);
 
 		// remove from global users list
 		allUsers.Remove(UserId);
 		AllPlayersCalibrated = allUsers.Count >= 1;
-
-		// Try to replace that user!
-		Debug.Log("Waiting for users.");
-
-		//if(CalibrationText != null)
-		//{
-		//	CalibrationText.guiText.text = "WAITING FOR USERS";
-		//}
 	}
 
 	// Some internal constants
@@ -1058,10 +498,11 @@ public class SimpleKinectManager : MonoBehaviour
 	private const int stateNotTracked = (int)KinectWrapper.NuiSkeletonPositionTrackingState.NotTracked;
 
 	private int[] mustBeTrackedJoints = {
-		(int)KinectWrapper.NuiSkeletonPositionIndex.AnkleLeft,
-		(int)KinectWrapper.NuiSkeletonPositionIndex.FootLeft,
-		(int)KinectWrapper.NuiSkeletonPositionIndex.AnkleRight,
-		(int)KinectWrapper.NuiSkeletonPositionIndex.FootRight,
+        (int)KinectWrapper.NuiSkeletonPositionIndex.Head
+		//(int)KinectWrapper.NuiSkeletonPositionIndex.AnkleLeft,
+		//(int)KinectWrapper.NuiSkeletonPositionIndex.FootLeft,
+		//(int)KinectWrapper.NuiSkeletonPositionIndex.AnkleRight,
+		//(int)KinectWrapper.NuiSkeletonPositionIndex.FootRight,
 	};
 
 	// Process the skeleton data
@@ -1113,10 +554,6 @@ public class SimpleKinectManager : MonoBehaviour
 					}
 				}
 
-				//// get joints orientations
-				//KinectWrapper.NuiSkeletonBoneOrientation[] jointOrients = new KinectWrapper.NuiSkeletonBoneOrientation[(int)KinectWrapper.NuiSkeletonPositionIndex.Count];
-				//KinectWrapper.NuiSkeletonCalculateBoneOrientations(ref skeletonData, jointOrients);
-
 				if (userId == Player1ID && Mathf.Abs(skeletonPos.z) >= MinUserDistance &&
 				   (MaxUserDistance <= 0f || Mathf.Abs(skeletonPos.z) <= MaxUserDistance))
 				{
@@ -1127,12 +564,6 @@ public class SimpleKinectManager : MonoBehaviour
 
 					// apply tracking state filter first
 					trackingStateFilter[0].UpdateFilter(ref skeletonData);
-
-					// fixup skeleton to improve avatar appearance.
-					if (UseClippedLegsFilter && clippedLegsFilter[0] != null)
-					{
-						clippedLegsFilter[0].FilterSkeleton(ref skeletonData, deltaNuiTime);
-					}
 
 					if (UseSelfIntersectionConstraint && selfIntersectionConstraint != null)
 					{
@@ -1153,22 +584,6 @@ public class SimpleKinectManager : MonoBehaviour
 							player1JointsPos[j] = kinectToWorld.MultiplyPoint3x4(skeletonData.SkeletonPositions[j]);
 							//player1JointsOri[j] = jointOrients[j].absoluteRotation.rotationMatrix * flipMatrix;
 						}
-
-						//						if(j == (int)KinectWrapper.NuiSkeletonPositionIndex.HipCenter)
-						//						{
-						//							string debugText = String.Format("{0} {1}", /**(int)skeletonData.eSkeletonPositionTrackingState[j], */
-						//								player1JointsTracked[j] ? "T" : "F", player1JointsPos[j]/**, skeletonData.SkeletonPositions[j]*/);
-						//							
-						//							if(CalibrationText)
-						//								CalibrationText.guiText.text = debugText;
-						//						}
-					}
-
-					// draw the skeleton on top of texture
-					if (DisplaySkeletonLines && ComputeUserMap)
-					{
-						DrawSkeleton(usersLblTex, ref skeletonData, ref player1JointsTracked);
-						usersLblTex.Apply();
 					}
 
 					// calculate joint orientations
@@ -1189,27 +604,6 @@ public class SimpleKinectManager : MonoBehaviour
 
 					// get player rotation
 					player1Ori = player1JointsOri[(int)KinectWrapper.NuiSkeletonPositionIndex.HipCenter];
-
-					// check for gestures
-					if (Time.realtimeSinceStartup >= gestureTrackingAtTime[0])
-					{
-						int listGestureSize = player1Gestures.Count;
-						float timestampNow = Time.realtimeSinceStartup;
-						string sDebugGestures = string.Empty;  // "Tracked Gestures:\n";
-
-						for (int g = 0; g < listGestureSize; g++)
-						{
-							KinectGestures.GestureData gestureData = player1Gestures[g];
-
-							if ((timestampNow >= gestureData.startTrackingAtTime) &&
-								!IsConflictingGestureInProgress(gestureData))
-							{
-								KinectGestures.CheckForGesture(userId, ref gestureData, Time.realtimeSinceStartup,
-									ref player1JointsPos, ref player1JointsTracked);
-								player1Gestures[g] = gestureData;
-							}
-						}
-					}
 				}
 				
 				lostUsers.Remove(userId);
@@ -1229,107 +623,6 @@ public class SimpleKinectManager : MonoBehaviour
 
 			lostUsers.Clear();
 		}
-	}
-
-	// draws the skeleton in the given texture
-	private void DrawSkeleton(Texture2D aTexture, ref KinectWrapper.NuiSkeletonData skeletonData, ref bool[] playerJointsTracked)
-	{
-		int jointsCount = (int)KinectWrapper.NuiSkeletonPositionIndex.Count;
-
-		for (int i = 0; i < jointsCount; i++)
-		{
-			int parent = KinectWrapper.GetSkeletonJointParent(i);
-
-			if (playerJointsTracked[i] && playerJointsTracked[parent])
-			{
-				Vector3 posParent = KinectWrapper.MapSkeletonPointToDepthPoint(skeletonData.SkeletonPositions[parent]);
-				Vector3 posJoint = KinectWrapper.MapSkeletonPointToDepthPoint(skeletonData.SkeletonPositions[i]);
-
-				//				posParent.y = KinectWrapper.Constants.ImageHeight - posParent.y - 1;
-				//				posJoint.y = KinectWrapper.Constants.ImageHeight - posJoint.y - 1;
-				//				posParent.x = KinectWrapper.Constants.ImageWidth - posParent.x - 1;
-				//				posJoint.x = KinectWrapper.Constants.ImageWidth - posJoint.x - 1;
-
-				//Color lineColor = playerJointsTracked[i] && playerJointsTracked[parent] ? Color.red : Color.yellow;
-				DrawLine(aTexture, (int)posParent.x, (int)posParent.y, (int)posJoint.x, (int)posJoint.y, Color.yellow);
-			}
-		}
-	}
-
-	// draws a line in a texture
-	private void DrawLine(Texture2D a_Texture, int x1, int y1, int x2, int y2, Color a_Color)
-	{
-		int width = a_Texture.width;  // KinectWrapper.Constants.DepthImageWidth;
-		int height = a_Texture.height;  // KinectWrapper.Constants.DepthImageHeight;
-
-		int dy = y2 - y1;
-		int dx = x2 - x1;
-
-		int stepy = 1;
-		if (dy < 0)
-		{
-			dy = -dy;
-			stepy = -1;
-		}
-
-		int stepx = 1;
-		if (dx < 0)
-		{
-			dx = -dx;
-			stepx = -1;
-		}
-
-		dy <<= 1;
-		dx <<= 1;
-
-		if (x1 >= 0 && x1 < width && y1 >= 0 && y1 < height)
-			for (int x = -1; x <= 1; x++)
-				for (int y = -1; y <= 1; y++)
-					a_Texture.SetPixel(x1 + x, y1 + y, a_Color);
-
-		if (dx > dy)
-		{
-			int fraction = dy - (dx >> 1);
-
-			while (x1 != x2)
-			{
-				if (fraction >= 0)
-				{
-					y1 += stepy;
-					fraction -= dx;
-				}
-
-				x1 += stepx;
-				fraction += dy;
-
-				if (x1 >= 0 && x1 < width && y1 >= 0 && y1 < height)
-					for (int x = -1; x <= 1; x++)
-						for (int y = -1; y <= 1; y++)
-							a_Texture.SetPixel(x1 + x, y1 + y, a_Color);
-			}
-		}
-		else
-		{
-			int fraction = dx - (dy >> 1);
-
-			while (y1 != y2)
-			{
-				if (fraction >= 0)
-				{
-					x1 += stepx;
-					fraction -= dy;
-				}
-
-				y1 += stepy;
-				fraction += dx;
-
-				if (x1 >= 0 && x1 < width && y1 >= 0 && y1 < height)
-					for (int x = -1; x <= 1; x++)
-						for (int y = -1; y <= 1; y++)
-							a_Texture.SetPixel(x1 + x, y1 + y, a_Color);
-			}
-		}
-
 	}
 
 	// convert the matrix to quaternion, taking care of the mirroring
@@ -1355,99 +648,5 @@ public class SimpleKinectManager : MonoBehaviour
 			return Quaternion.LookRotation(vZ, vY);
 		else
 			return Quaternion.identity;
-	}
-
-	// return the index of gesture in the list, or -1 if not found
-	private int GetGestureIndex(uint UserId, KinectGestures.Gestures gesture)
-	{
-		if (UserId == Player1ID)
-		{
-			int listSize = player1Gestures.Count;
-			for (int i = 0; i < listSize; i++)
-			{
-				if (player1Gestures[i].gesture == gesture)
-					return i;
-			}
-		}
-
-		return -1;
-	}
-
-	private bool IsConflictingGestureInProgress(KinectGestures.GestureData gestureData)
-	{
-		foreach (KinectGestures.Gestures gesture in gestureData.checkForGestures)
-		{
-			int index = GetGestureIndex(gestureData.userId, gesture);
-
-			if (index >= 0)
-			{
-				if (gestureData.userId == Player1ID)
-				{
-					if (player1Gestures[index].progress > 0f)
-						return true;
-				}
-			}
-		}
-
-		return false;
-	}
-
-	// check if the calibration pose is complete for given user
-	private bool CheckForCalibrationPose(uint userId, ref KinectGestures.Gestures calibrationGesture,
-		ref KinectGestures.GestureData gestureData, ref KinectWrapper.NuiSkeletonData skeletonData)
-	{
-		if (calibrationGesture == KinectGestures.Gestures.None)
-			return true;
-
-		// init gesture data if needed
-		if (gestureData.userId != userId)
-		{
-			gestureData.userId = userId;
-			gestureData.gesture = calibrationGesture;
-			gestureData.state = 0;
-			gestureData.joint = 0;
-			gestureData.progress = 0f;
-			gestureData.complete = false;
-			gestureData.cancelled = false;
-		}
-
-		// get temporary joints' position
-		int skeletonJointsCount = (int)KinectWrapper.NuiSkeletonPositionIndex.Count;
-		bool[] jointsTracked = new bool[skeletonJointsCount];
-		Vector3[] jointsPos = new Vector3[skeletonJointsCount];
-
-		int stateTracked = (int)KinectWrapper.NuiSkeletonPositionTrackingState.Tracked;
-		int stateNotTracked = (int)KinectWrapper.NuiSkeletonPositionTrackingState.NotTracked;
-
-		int[] mustBeTrackedJoints = {
-			(int)KinectWrapper.NuiSkeletonPositionIndex.AnkleLeft,
-			(int)KinectWrapper.NuiSkeletonPositionIndex.FootLeft,
-			(int)KinectWrapper.NuiSkeletonPositionIndex.AnkleRight,
-			(int)KinectWrapper.NuiSkeletonPositionIndex.FootRight,
-		};
-
-		for (int j = 0; j < skeletonJointsCount; j++)
-		{
-			jointsTracked[j] = Array.BinarySearch(mustBeTrackedJoints, j) >= 0 ? (int)skeletonData.eSkeletonPositionTrackingState[j] == stateTracked :
-				(int)skeletonData.eSkeletonPositionTrackingState[j] != stateNotTracked;
-
-			if (jointsTracked[j])
-			{
-				jointsPos[j] = kinectToWorld.MultiplyPoint3x4(skeletonData.SkeletonPositions[j]);
-			}
-		}
-
-		// estimate the gesture progess
-		KinectGestures.CheckForGesture(userId, ref gestureData, Time.realtimeSinceStartup,
-			ref jointsPos, ref jointsTracked);
-
-		// check if gesture is complete
-		if (gestureData.complete)
-		{
-			gestureData.userId = 0;
-			return true;
-		}
-
-		return false;
 	}
 }
